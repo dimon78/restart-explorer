@@ -123,7 +123,7 @@ if exist "%pathsfile%" (
         echo   - restored >> "%logfile%"
     )
     echo Total restored attempts: !count! >> "%logfile%"
-    rem del "%pathsfile%" >nul 2>&1
+    del "%pathsfile%" >nul 2>&1
 ) else (
     echo No paths file - nothing to restore >> "%logfile%"
 )
@@ -134,7 +134,7 @@ echo. >> "%logfile%"
 echo Restoring Z-order of all windows... >> "%logfile%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_zorders.ps1" -ZOrderFile "%zorderfile%" >> "%logfile%" 2>&1
-rem del "%zorderfile%" >nul 2>&1
+del "%zorderfile%" >nul 2>&1
 
 echo. >> "%logfile%"
 

@@ -37,15 +37,11 @@ echo   PC idle and monitor off, proceeding... >> "%logfile%"
 :skip_check
 echo. >> "%logfile%"
 
-:: === 1. Сохраняем Z-порядок ВСЕХ окон ===
-echo Saving Z-order of all windows... >> "%logfile%"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0collect_zorders.ps1" -OutputPath "%zorderfile%" >> "%logfile%" 2>&1
-echo. >> "%logfile%"
-
-:: === 2. Сохраняем окна проводника (пути и состояние) ===
+:: === 1. Сохраняем окна проводника (пути и состояние) ===
 echo Getting open Explorer windows + minimized state... >> "%logfile%"
 
 if exist "%pathsfile%" del "%pathsfile%" >nul 2>&1
+if exist "%zorderfile%" del "%zorderfile%" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0collect_explorers.ps1" -OutputPath "%pathsfile%" >> "%logfile%" 2>&1
 
 echo. >> "%logfile%"
@@ -58,6 +54,15 @@ if exist "%pathsfile%" (
     for /f "usebackq delims=" %%A in ("%pathsfile%") do set "HAS_EXPLORER_WINDOWS=1"
 )
 echo Explorer windows saved: !HAS_EXPLORER_WINDOWS! >> "%logfile%"
+
+:: === 2. Сохраняем Z-порядок только при наличии окон проводника ===
+if "!HAS_EXPLORER_WINDOWS!"=="1" (
+    echo Saving Z-order of all windows... >> "%logfile%"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0collect_zorders.ps1" -OutputPath "%zorderfile%" >> "%logfile%" 2>&1
+) else (
+    echo Skipping Z-order save - no Explorer windows were saved >> "%logfile%"
+)
+echo. >> "%logfile%"
 
 :: === 3. Kill explorer ===
 echo Killing explorer... >> "%logfile%"

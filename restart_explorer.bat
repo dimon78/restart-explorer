@@ -45,12 +45,19 @@ echo. >> "%logfile%"
 :: === 2. Сохраняем окна проводника (пути и состояние) ===
 echo Getting open Explorer windows + minimized state... >> "%logfile%"
 
+if exist "%pathsfile%" del "%pathsfile%" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0collect_explorers.ps1" -OutputPath "%pathsfile%" >> "%logfile%" 2>&1
 
 echo. >> "%logfile%"
 echo Content of paths file: >> "%logfile%"
 if exist "%pathsfile%" (type "%pathsfile%" >> "%logfile%") else (echo paths file NOT created >> "%logfile%")
 echo. >> "%logfile%"
+
+set "HAS_EXPLORER_WINDOWS=0"
+if exist "%pathsfile%" (
+    for /f "usebackq delims=" %%A in ("%pathsfile%") do set "HAS_EXPLORER_WINDOWS=1"
+)
+echo Explorer windows saved: !HAS_EXPLORER_WINDOWS! >> "%logfile%"
 
 :: === 3. Kill explorer ===
 echo Killing explorer... >> "%logfile%"
@@ -131,9 +138,12 @@ if exist "%pathsfile%" (
 echo. >> "%logfile%"
 
 :: === 6. Restore Z-order of ALL windows ===
-echo Restoring Z-order of all windows... >> "%logfile%"
-
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_zorders.ps1" -ZOrderFile "%zorderfile%" >> "%logfile%" 2>&1
+if "!HAS_EXPLORER_WINDOWS!"=="1" (
+    echo Restoring Z-order of all windows... >> "%logfile%"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_zorders.ps1" -ZOrderFile "%zorderfile%" >> "%logfile%" 2>&1
+) else (
+    echo Skipping Z-order restore - no Explorer windows were saved >> "%logfile%"
+)
 del "%zorderfile%" >nul 2>&1
 
 echo. >> "%logfile%"

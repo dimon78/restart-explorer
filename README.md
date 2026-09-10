@@ -11,6 +11,7 @@ The utility:
 - checks user inactivity and monitor power state;
 - saves open File Explorer windows, positions, sizes, view settings, and state;
 - saves and restores the Z-order of visible windows;
+- skips Z-order restoration when no File Explorer windows were open;
 - restarts the Windows shell;
 - restores Explorer windows and the previous foreground window;
 - can turn off the display after recovery.
@@ -36,6 +37,7 @@ turn off the display.
 - проверяет бездействие пользователя и состояние монитора;
 - сохраняет открытые окна Проводника, их позиции, размеры, режимы просмотра и состояние;
 - сохраняет и восстанавливает Z-порядок видимых окон;
+- не выполняет восстановление Z-порядка, если открытых окон Проводника не было;
 - перезапускает оболочку Windows;
 - восстанавливает окна Проводника и предыдущее активное окно;
 - может выключить монитор после восстановления.

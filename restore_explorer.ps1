@@ -1,5 +1,63 @@
 # restore_explorer.ps1 - С функцией Restore-Window
 
+Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+
+public static class ExplorerWindowReadiness {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+}
+'@
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WinAPI {
+    [DllImport("user32.dll")]
+    public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+
+function Get-ExplorerWindowReadiness {
+    param([IntPtr]$Hwnd)
+
+    $classes = @{}
+    $callback = {
+        param($childHwnd, $lParam)
+
+        if (-not [ExplorerWindowReadiness]::IsWindowVisible($childHwnd)) {
+            return $true
+        }
+
+        $className = New-Object System.Text.StringBuilder 256
+        [void][ExplorerWindowReadiness]::GetClassName($childHwnd, $className, $className.Capacity)
+        $classes[$className.ToString()] = $true
+        return $true
+    }
+
+    [void][ExplorerWindowReadiness]::EnumChildWindows($Hwnd, $callback, [IntPtr]::Zero)
+
+    $hasFolderView = $classes.ContainsKey("SHELLDLL_DefView")
+    $hasCommandBar = $classes.ContainsKey("Microsoft.UI.Content.DesktopChildSiteBridge")
+
+    return @{
+        Ready = $hasFolderView -and $hasCommandBar
+        Status = "folderView=$hasFolderView, commandBar=$hasCommandBar, children=$($classes.Keys -join ',')"
+    }
+}
+
 function Restore-Window {
     param(
         [string]$Path,
@@ -21,30 +79,43 @@ function Restore-Window {
     Start-Process explorer.exe -ArgumentList "`"$Path`""
     Write-Output 'opened via explorer.exe'
 
-    Start-Sleep -Milliseconds 1500
-
-    # Применяем позицию, размер, ViewMode, IconSize
     $shell = New-Object -ComObject Shell.Application
-    foreach ($w in $shell.Windows()) {
-        try {
-            $wPath = $w.Document.Folder.Self.Path
-            if ($w.FullName -like '*explorer.exe' -and $wPath -eq $Path) {
-                $hwnd = [IntPtr]$w.HWND
-                $doc = $w.Document
-                
-                # WinAPI функции
-                $code = @"
-using System;
-using System.Runtime.InteropServices;
-public class WinAPI {
-    [DllImport("user32.dll")]
-    public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-}
-"@
-                Add-Type -TypeDefinition $code
-                
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $window = $null
+    $lastStatus = ""
+
+    while ([DateTime]::UtcNow -lt $deadline -and $null -eq $window) {
+        foreach ($candidate in $shell.Windows()) {
+            try {
+                $candidatePath = $candidate.Document.Folder.Self.Path
+                if ($candidate.FullName -like '*explorer.exe' -and $candidatePath -eq $Path) {
+                    $readiness = Get-ExplorerWindowReadiness ([IntPtr]$candidate.HWND)
+                    if ($readiness.Status -ne $lastStatus) {
+                        Write-Output "Explorer window readiness: $($readiness.Status)"
+                        $lastStatus = $readiness.Status
+                    }
+
+                    if ($readiness.Ready) {
+                        $window = $candidate
+                        break
+                    }
+                }
+            } catch {}
+        }
+
+        if ($null -eq $window) {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+
+    if ($null -eq $window) {
+        throw "Explorer window did not become ready within 60 seconds: '$Path'"
+    }
+
+    $hwnd = [IntPtr]$window.HWND
+    $doc = $window.Document
+    Write-Output "Explorer window and command bar are ready"
+
                 # Шаг 1: всегда восстанавливаем normal и ставим размер/позицию
                 [WinAPI]::ShowWindow($hwnd, 9)  # SW_RESTORE
                 Start-Sleep -Milliseconds 100
@@ -75,11 +146,6 @@ public class WinAPI {
                     try { $doc.IconSize = [int]$IconSize } catch {} 
                 }
                 Write-Output "applied vm=$ViewMode isz=$IconSize"
-                
-                break
-            }
-        } catch {}
-    }
 
     # Сортировка/группировка через отдельный процесс (без Invoke)
     if ($SortStr -and $SortStr -ne '' -and $SortStr -ne ':') {

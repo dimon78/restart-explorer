@@ -73,27 +73,16 @@ echo   explorer.exe terminated >> "%logfile%"
 echo Starting explorer... >> "%logfile%"
 start explorer.exe
 
-echo Waiting for explorer shell to be fully ready... >> "%logfile%"
-
-set "wait_count=0"
-
-:wait_shell
-timeout /t 1 /nobreak >nul
-set /a wait_count+=1
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-"$p = Get-Process explorer -ErrorAction SilentlyContinue; if (-not $p) { exit 1 }; $null = Add-Type -Name User32 -Namespace Win32 -MemberDefinition '[DllImport(\"user32.dll\")] public static extern IntPtr FindWindow(string c, string n); [DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr hWnd);'; $hwnd = [Win32.User32]::FindWindow('Shell_TrayWnd', $null); if ($hwnd -eq [IntPtr]::Zero) { exit 1 }; if (-not [Win32.User32]::IsWindowVisible($hwnd)) { exit 1 }; Write-Output ('PID=' + $p.Id + ' Shell_TrayWnd visible'); exit 0" > "%TEMP%\shell_check.txt" 2>&1
-
+echo Waiting for explorer shell and taskbar to be fully ready... >> "%logfile%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0wait_for_shell.ps1" -TimeoutSeconds 120 -RequiredSuccesses 4 >> "%logfile%" 2>&1
 if errorlevel 1 (
-    echo   attempt !wait_count!: shell not ready yet >> "%logfile%"
-    goto wait_shell
+    echo   shell readiness check failed - aborting window restore >> "%logfile%"
+    echo. >> "%logfile%"
+    echo End: %date% %time% >> "%logfile%"
+    echo ======================================== >> "%logfile%"
+    exit /b 1
 )
-
-echo   attempt !wait_count!: shell is ready >> "%logfile%"
-type "%TEMP%\shell_check.txt" >> "%logfile%"
-del "%TEMP%\shell_check.txt" >nul 2>&1
-
-echo Explorer shell is ready >> "%logfile%"
+echo Explorer shell and taskbar are ready >> "%logfile%"
 echo. >> "%logfile%"
 
 :: === 5. Restore windows ===
